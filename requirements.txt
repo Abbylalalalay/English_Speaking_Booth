@@ -2,3 +2,4 @@ streamlit
 google-generativeai
 genanki
 streamlit-mic-recorder
+beautifulsoup4
