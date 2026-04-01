@@ -998,27 +998,38 @@ if "text" in st.session_state and st.session_state["text"]:
                         target_sentence, f"demo_{curr_idx}.mp3"
                     )
                 except Exception as e:
-                    # 如果生成失败，不再让程序崩溃，而是优雅地记录错误
-                    st.error(f"⚠️ 示范语音生成失败，请检查云端依赖: {e}")
-                    st.session_state[audio_key] = None  # 存入空值，防止无限重试报错
+                    # 优雅捕获异常，绝不让程序崩溃
+                    st.error(f"⚠️ 示范语音生成失败: {e}")
+                    st.session_state[audio_key] = None
 
         st.markdown("**🎧 听完示范后点击录音：**")
 
-        # 安全播放音频：只有音频真的生成成功了才播放
+        # 只有真正生成了音频，才显示播放器
         if st.session_state.get(audio_key):
             st.audio(st.session_state[audio_key])
         else:
-            st.warning("⚠️ 暂无示范发音，但你依然可以看上面的句子直接录音打卡！")
+            st.warning("⚠️ 暂无示范发音，但你依然可以直接看上面的句子录音打卡！")
 
-        # 4. 用户录音组件 (每次重试赋予不同的 key 强制刷新)
+        # ==========================================
+        # 4. 用户录音组件 (极其关键：必须和上面的 st.markdown 左边对齐！)
+        # ==========================================
         shadow_audio_info = mic_recorder(
             start_prompt="▶️ 开始跟读",
             stop_prompt="⏹️ 结束跟读",
             key=f"shadow_rec_{curr_idx}_{st.session_state['s4_retry_count']}",
         )
 
-        if shadow_audio_info and api_key:
+        # 5. 动态展示提交区域 (录音完成后自动浮现)
+        # 使用 get 方法安全获取 api_key，防止因作用域问题报错
+        current_api_key = (
+            locals().get("api_key")
+            or globals().get("api_key")
+            or st.secrets.get("GEMINI_API_KEY")
+        )
+
+        if shadow_audio_info and current_api_key:
             shadow_audio_bytes = shadow_audio_info["bytes"]
+            st.markdown("**✅ 你的录音：**")
             st.audio(shadow_audio_bytes, format="audio/wav")
 
             if st.button(
@@ -1078,20 +1089,17 @@ if "text" in st.session_state and st.session_state["text"]:
 
                         # 🎯 核心逻辑：分数判定与过关机制
                         if score >= 90:
-                            # 达到 Native 水平，直接清空阻碍，进入下一关
                             st.session_state["s4_feedback"] = ""
                             st.session_state["s4_current_index"] += 1
                             st.session_state["s4_retry_count"] = 0
                             st.success(
                                 f"🎉 你的得分是 **{score}**！极其完美的 Native 发音，直接解锁下一句！"
                             )
-                            time.sleep(3)  # 庆祝 3 秒
-                            st.rerun()  # 刷新页面加载下一句
+                            time.sleep(3)
+                            st.rerun()
                         else:
-                            # 没有达到 90 分，判定重试次数
                             st.session_state["s4_retry_count"] += 1
                             if st.session_state["s4_retry_count"] >= 2:
-                                # 已经重试 2 次（总共读了 3 次），强制放行防止挫败感
                                 st.session_state["s4_feedback"] = ""
                                 st.session_state["s4_current_index"] += 1
                                 st.session_state["s4_retry_count"] = 0
@@ -1101,7 +1109,6 @@ if "text" in st.session_state and st.session_state["text"]:
                                 time.sleep(4)
                                 st.rerun()
                             else:
-                                # 还有重试机会，把教练的咆哮和分数丢在屏幕上
                                 st.session_state["s4_feedback"] = (
                                     f"❌ 你的得分是 **{score}** (通关需 90分)。\n\n**教练反馈：**\n{feedback_body}\n\n👉 请仔细看上面的纠音，再挑战一次！"
                                 )
