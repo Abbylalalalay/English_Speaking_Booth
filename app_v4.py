@@ -989,16 +989,26 @@ if "text" in st.session_state and st.session_state["text"]:
                     f"🔄 这是你的第 {st.session_state['s4_retry_count']} 次重试，注意刚才纠正的发音细节！"
                 )
 
-        # 3. 自动为当前句子生成示范发音并缓存
+        # 3. 自动为当前句子生成示范发音并缓存 (防弹版)
         audio_key = f"s4_audio_{curr_idx}"
         if audio_key not in st.session_state:
             with st.spinner("正在生成 Native 示范发音..."):
-                st.session_state[audio_key] = generate_fallback_audio(
-                    target_sentence, f"demo_{curr_idx}.mp3"
-                )
+                try:
+                    st.session_state[audio_key] = generate_fallback_audio(
+                        target_sentence, f"demo_{curr_idx}.mp3"
+                    )
+                except Exception as e:
+                    # 如果生成失败，不再让程序崩溃，而是优雅地记录错误
+                    st.error(f"⚠️ 示范语音生成失败，请检查云端依赖: {e}")
+                    st.session_state[audio_key] = None  # 存入空值，防止无限重试报错
 
         st.markdown("**🎧 听完示范后点击录音：**")
-        st.audio(st.session_state[audio_key])
+
+        # 安全播放音频：只有音频真的生成成功了才播放
+        if st.session_state.get(audio_key):
+            st.audio(st.session_state[audio_key])
+        else:
+            st.warning("⚠️ 暂无示范发音，但你依然可以看上面的句子直接录音打卡！")
 
         # 4. 用户录音组件 (每次重试赋予不同的 key 强制刷新)
         shadow_audio_info = mic_recorder(
