@@ -157,6 +157,32 @@ st.title("🎧 Native 英语特训舱 V1.0")
 history = load_history()
 
 with st.sidebar:
+    # --- 0. 配置 AI 大脑 (置顶，体验更好) ---
+    st.header("⚙️ 系统设置")
+
+    # 💡 终极混合驱动：先尝试从云端隐秘保险柜拿 Key
+    if "GEMINI_API_KEY" in st.secrets:
+        api_key = st.secrets["GEMINI_API_KEY"]
+        st.success("🟢 云端专属 AI 大脑已自动连接！")
+    else:
+        # 💡 核心记忆锁：加上 key="saved_api_key"，死死锁住输入框的内容
+        api_key = st.text_input(
+            "🔑 输入 Gemini API Key:", type="password", key="saved_api_key"
+        )
+        if api_key:
+            st.success("🟢 本地 AI 大脑已连接！")
+        else:
+            st.warning("⚠️ 请先输入 API Key 激活 AI 功能。")
+
+    # 只要拿到了 Key，就激活大模型
+    if api_key:
+        genai.configure(api_key=api_key)
+        # 💡 修复模型名称为正确的版本
+        model = genai.GenerativeModel("gemini-3.1-flash-lite-preview")
+
+    st.markdown("---")
+
+    # --- 1. 学习控制台 ---
     st.header("🎯 学习控制台")
 
     # 创建两个选项卡
@@ -232,20 +258,6 @@ with st.sidebar:
                             st.rerun()
                         else:
                             st.error("抓取失败，请稍后重试。")
-                        st.session_state["title"] = title
-                        st.session_state["audio_url"] = audio_url
-                        st.session_state["current_id"] = chosen_url
-
-                        # 存入历史记录
-                        history[chosen_url] = {
-                            "title": title,
-                            "date": datetime.now().strftime("%Y-%m-%d %H:%M"),
-                            "text": text,
-                            "audio_url": audio_url,
-                        }
-                        save_history(history)
-                        clear_training_states()
-                        st.rerun()
             else:
                 st.success("🏆 神级成就！Sivers 的博客全库已被你刷穿！")
         else:
@@ -282,7 +294,7 @@ with st.sidebar:
 
     st.markdown("---")
 
-    # --- 复习区 ---
+    # --- 2. 复习区 ---
     st.subheader("📚 历史复习库")
     if not history:
         st.caption("空空如也，赶紧开始你的第一篇吧！")
@@ -296,7 +308,7 @@ with st.sidebar:
 
             with st.expander(f"{icon} {info['date'][:10]} | {info['title'][:15]}"):
 
-                # 💡 新增功能：打标 Checkbox，点击后自动触发上面的 toggle_review 函数
+                # 💡 打标 Checkbox，点击后自动触发上面的 toggle_review 函数
                 st.checkbox(
                     "⭐ 标为需要重点复习",
                     value=needs_review,
@@ -308,7 +320,7 @@ with st.sidebar:
                 if st.button(
                     "🔄 重新挑战这篇", key=f"retry_{aid}", use_container_width=True
                 ):
-                    # 瞬间从本地加载，不需要重新爬网
+                    # 💡 修复了之前重复粘贴两遍的 Bug
                     st.session_state["text"] = info["text"]
                     st.session_state["title"] = info["title"]
                     st.session_state["audio_url"] = info.get("audio_url", "")
@@ -316,25 +328,6 @@ with st.sidebar:
 
                     clear_training_states()
                     st.rerun()
-                    # 瞬间从本地加载，不需要重新爬网
-                    st.session_state["text"] = info["text"]
-                    st.session_state["title"] = info["title"]
-                    st.session_state["audio_url"] = info.get("audio_url", "")
-                    st.session_state["current_id"] = aid
-
-                    clear_training_states()
-                    st.rerun()
-
-# --- 0. 配置 AI 大脑 ---
-with st.sidebar:
-    st.header("⚙️ 系统设置")
-    api_key = st.text_input("🔑 输入 Gemini API Key:", type="password")
-    if api_key:
-        genai.configure(api_key=api_key)
-        model = genai.GenerativeModel("gemini-3.1-flash-lite-preview")
-        st.success("AI 大脑已连接！")
-    else:
-        st.warning("请先输入 API Key 激活 AI 功能。")
 
 
 # --- 1. 核心逻辑：网页抓取与兜底音频 ---
