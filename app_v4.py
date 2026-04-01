@@ -1215,7 +1215,7 @@ if "text" in st.session_state and st.session_state["text"]:
                 """
                 if current_api_key:
                     genai.configure(api_key=current_api_key)
-                    temp_model = genai.GenerativeModel("gemini-1.5-flash")
+                    temp_model = genai.GenerativeModel("gemini-3.1-flash-lite-preview")
                     kw_response = temp_model.generate_content(kw_prompt)
                     st.session_state["s6_keywords"] = (
                         kw_response.text.replace("**", "").replace("#", "").strip()
@@ -1258,7 +1258,7 @@ if "text" in st.session_state and st.session_state["text"]:
                         temp_audio_path = temp_audio.name
 
                     genai.configure(api_key=current_api_key)
-                    temp_model = genai.GenerativeModel("gemini-1.5-flash")
+                    temp_model = genai.GenerativeModel("gemini-3.1-flash-lite-preview")
                     audio_file = genai.upload_file(path=temp_audio_path)
 
                     retell_prompt = f"""
