@@ -23,6 +23,18 @@ from bs4 import BeautifulSoup
 import streamlit as st
 import google.generativeai as genai
 from streamlit_mic_recorder import mic_recorder
+from supabase import create_client, Client
+
+
+# 初始化 Supabase 数据库连接
+@st.cache_resource
+def init_connection():
+    url = st.secrets["SUPABASE_URL"]
+    key = st.secrets["SUPABASE_KEY"]
+    return create_client(url, key)
+
+
+supabase = init_connection()
 
 # ==========================================
 # 🧠 核心记忆引擎与 Sivers 爬虫
@@ -115,15 +127,46 @@ def fetch_sivers_article(url):
 
 # 2. 读写学习记录 (连同文章原文一起存下，方便复习)
 def load_history():
-    if os.path.exists(HISTORY_FILE):
-        with open(HISTORY_FILE, "r", encoding="utf-8") as f:
-            return json.load(f)
-    return {}
+    """从 Supabase 云端数据库读取历史记录"""
+    try:
+        response = supabase.table("history").select("*").execute()
+        history_dict = {}
+        # 将数据库里的列表数据，转换回我们之前熟悉的字典格式
+        for row in response.data:
+            history_dict[row["id"]] = {
+                "title": row.get("title", ""),
+                "date": row.get("date", ""),
+                "text": row.get("text", ""),
+                "audio_url": row.get("audio_url", ""),
+                "needs_review": row.get("needs_review", False),
+            }
+        return history_dict
+    except Exception as e:
+        st.error(f"读取云端数据库失败: {e}")
+        return {}
 
 
-def save_history(history):
-    with open(HISTORY_FILE, "w", encoding="utf-8") as f:
-        json.dump(history, f, ensure_ascii=False, indent=4)
+def save_history(history_dict):
+    """将历史记录保存（Upsert）到 Supabase 云端数据库"""
+    data_to_upsert = []
+    # 把字典重新转换成数据库认识的列表格式
+    for aid, info in history_dict.items():
+        data_to_upsert.append(
+            {
+                "id": aid,  # 这个是我们之前生成的唯一 URL 或 manual_id
+                "title": info.get("title", ""),
+                "date": info.get("date", ""),
+                "text": info.get("text", ""),
+                "audio_url": info.get("audio_url", ""),
+                "needs_review": info.get("needs_review", False),
+            }
+        )
+
+    try:
+        # upsert 极其强大：如果 id 不存在就插入新数据，如果存在就更新覆盖
+        supabase.table("history").upsert(data_to_upsert).execute()
+    except Exception as e:
+        st.error(f"同步云端数据库失败: {e}")
 
 
 # 3. 清理状态缓存的辅助函数（切换文章时必须清理旧数据）
