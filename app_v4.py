@@ -1301,12 +1301,16 @@ if "text" in st.session_state and st.session_state["text"]:
             st.session_state["s6_has_fired_balloons"] = True
 
     st.markdown("---")
-
+# ==========================================
     # == Step 7: 纯英文闲聊 (Free Talk) ==
+    # ==========================================
     st.subheader("Step 7: 纯英文闲聊 (Free Talk)")
     st.info(
         "☕ 忘掉原文、忘掉语法、忘掉翻译！现在我们像朋友一样，用纯英文随便聊聊这篇文章里涉及的话题。对话将限制在 6 轮以内，尽情表达吧！"
     )
+
+    # 💡 核心防护 1：极其稳定的 API Key 雷达
+    current_api_key = st.secrets.get("GEMINI_API_KEY") or st.session_state.get("saved_api_key")
 
     # 1. 初始化聊天记忆库与回合计数器
     if "s7_chat_history" not in st.session_state:
@@ -1321,12 +1325,14 @@ if "text" in st.session_state and st.session_state["text"]:
             {"role": "assistant", "content": opener_text}
         )
 
-        # 💡 核心修复：手动为第一个问题生成语音
+        # 💡 核心防护 2：给开场白语音加上防瘫痪保护
         with st.spinner("Preparing the opening..."):
-            # 为开场白生成专用的 TTS 文件
-            tts_opener_file = generate_fallback_audio(opener_text, "chat_opener.mp3")
-            # 把它存入“最新音频”缓存区
-            st.session_state["s7_latest_audio"] = tts_opener_file
+            try:
+                tts_opener_file = generate_fallback_audio(opener_text, "chat_opener.mp3")
+                st.session_state["s7_latest_audio"] = tts_opener_file
+            except Exception as e:
+                st.error(f"⚠️ 开场语音生成失败: {e}")
+                st.session_state["s7_latest_audio"] = None
 
     # 2. 渲染聊天气泡
     for msg in st.session_state["s7_chat_history"]:
@@ -1334,7 +1340,7 @@ if "text" in st.session_state and st.session_state["text"]:
             st.markdown(msg["content"])
 
     # 3. 自动播放 AI 的最新语音回复
-    if "s7_latest_audio" in st.session_state and os.path.exists(
+    if "s7_latest_audio" in st.session_state and st.session_state["s7_latest_audio"] and os.path.exists(
         st.session_state["s7_latest_audio"]
     ):
         st.audio(st.session_state["s7_latest_audio"])
@@ -1351,21 +1357,29 @@ if "text" in st.session_state and st.session_state["text"]:
             key=f"chat_rec_{st.session_state['s7_turn_count']}",
         )
 
-        if chat_audio_info and api_key:
-            chat_audio_bytes = chat_audio_info["bytes"]
+        # 💡 核心防护 3：拿到录音立刻锁进长期记忆
+        if chat_audio_info:
+            st.session_state["s7_audio_bytes_locked"] = chat_audio_info["bytes"]
+
+        # 基于长期记忆和 API Key 存在与否来判断是否显示发送按钮
+        if st.session_state.get("s7_audio_bytes_locked") and current_api_key:
             # 让你在发送前能自己听一下录得对不对
-            st.audio(chat_audio_bytes, format="audio/wav")
+            st.audio(st.session_state["s7_audio_bytes_locked"], format="audio/wav")
 
             if st.button(
                 "🚀 确认无误，发送给朋友",
                 key=f"btn_chat_{st.session_state['s7_turn_count']}",
             ):
                 with st.spinner("你的朋友正在思考并回复..."):
+                    # 重新挂载大模型，确保万无一失
+                    genai.configure(api_key=current_api_key)
+                    temp_model = genai.GenerativeModel("gemini-3.1-flash-lite-preview")
+                    
                     # 第一步：保存录音和准备 Prompt (本地操作，不会断网)
                     with tempfile.NamedTemporaryFile(
                         delete=False, suffix=".wav"
                     ) as temp_audio:
-                        temp_audio.write(chat_audio_bytes)
+                        temp_audio.write(st.session_state["s7_audio_bytes_locked"])
                         temp_audio_path = temp_audio.name
 
                     # 提取最近的对话上下文，让 AI 有“短期记忆”
@@ -1373,13 +1387,12 @@ if "text" in st.session_state and st.session_state["text"]:
                     for msg in st.session_state["s7_chat_history"][-4:]:
                         chat_context += f"{msg['role']}: {msg['content']}\n"
 
-                    # 💡 修复 Bug：正确定义指令
+                    # 修复 Bug：正确定义指令
                     if st.session_state["s7_turn_count"] == 5:
                         ending_instruction = "5. 这是我们对话的最后一轮，请自然地总结我们的聊天，并跟我道别（Say goodbye）。绝对不要再提出任何新问题了！"
                     else:
                         ending_instruction = "5. 在最后自然地抛出一个相关的问题（比如 'What about you?' 或 'Have you ever experienced something similar?'），引导我继续说下去。"
 
-                    # 💡 修复 Bug：将 {ending_instruction} 植入 Prompt，替换原来写死的文本
                     chat_prompt = f"""
                     你现在是我的一个美国朋友（Native English Speaker）。我们正在喝咖啡闲聊，话题是基于这篇文章拓展的：“{st.session_state['text']}”。
                     
@@ -1402,9 +1415,9 @@ if "text" in st.session_state and st.session_state["text"]:
 
                     for attempt in range(max_retries):
                         try:
-                            # 这两步是最容易触发 EOF 网络中断的，把它们保护起来
+                            # 这些容易断开的操作，都用 temp_model
                             audio_file = genai.upload_file(path=temp_audio_path)
-                            response = model.generate_content([chat_prompt, audio_file])
+                            response = temp_model.generate_content([chat_prompt, audio_file])
 
                             # 拿到结果，清洗格式
                             reply_text = (
@@ -1415,19 +1428,13 @@ if "text" in st.session_state and st.session_state["text"]:
                         except Exception as e:
                             error_msg = str(e)
                             if "429" in error_msg or "Quota" in error_msg:
-                                st.warning(
-                                    "⏳ 你的朋友正在喝水，触发频率限制，请稍等片刻后再发消息。"
-                                )
-                                break  # 频率限制没必要重试，直接跳出
+                                st.warning("⏳ 你的朋友正在喝水，触发频率限制，请稍等片刻后再发消息。")
+                                break
                             elif attempt < max_retries - 1:
-                                time.sleep(
-                                    2
-                                )  # 遇到 SSL EOF 断连，冷静等 2 秒后默默重新发一次
+                                time.sleep(2)
                                 continue
                             else:
-                                st.error(
-                                    f"⚠️ 网络代理极不稳定，已重试 3 次仍被强制中断连接: {e}"
-                                )
+                                st.error(f"⚠️ 网络代理极不稳定，已重试 3 次仍被强制中断连接: {e}")
                                 break
 
                     # 第三步：如果成功拿到了回复，执行记忆保存和网页刷新
@@ -1441,18 +1448,28 @@ if "text" in st.session_state and st.session_state["text"]:
                         )
 
                         # 生成 AI 的语音回复
-                        tts_file = generate_fallback_audio(
-                            reply_text,
-                            f"chat_reply_{st.session_state['s7_turn_count']}.mp3",
-                        )
-                        st.session_state["s7_latest_audio"] = tts_file
+                        try:
+                            tts_file = generate_fallback_audio(
+                                reply_text,
+                                f"chat_reply_{st.session_state['s7_turn_count']}.mp3",
+                            )
+                            st.session_state["s7_latest_audio"] = tts_file
+                        except Exception as e:
+                            st.error(f"⚠️ 回复语音生成失败: {e}")
+                            st.session_state["s7_latest_audio"] = None
 
                         # 回合数 +1，准备进入下一轮
                         st.session_state["s7_turn_count"] += 1
 
-                        # 垃圾清理并刷新页面
+                        # 垃圾清理
                         os.remove(temp_audio_path)
+                        # 💡 极其重要：解锁音频记忆，为下一轮录音腾出空间！
+                        del st.session_state["s7_audio_bytes_locked"]
+                        
                         st.rerun()
+
+        elif st.session_state.get("s7_audio_bytes_locked") and not current_api_key:
+             st.warning("⚠️ 录音已准备好，但请先配置 API Key 才能发送哦！")
 
     else:
         # 当 6 轮满员后，隐藏录音区，展示终极撒花庆祝
