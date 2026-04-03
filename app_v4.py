@@ -10,6 +10,7 @@ import google.generativeai as genai
 import genanki
 import io  # 用于处理文件下载
 import re  # 用于把文章切割成一句句
+import base64
 import os
 import re
 import json
@@ -924,18 +925,25 @@ if "text" in st.session_state and st.session_state["text"]:
                 )
                 my_deck.add_note(my_note)
 
-            # 将牌组打包写入内存，并生成 Streamlit 下载按钮
+            # 将牌组打包写入内存
             package = genanki.Package(my_deck)
-            # 使用 io.BytesIO 将文件保存在内存中供下载
             file_stream = io.BytesIO()
             package.write_to_file(file_stream)
 
-            st.download_button(
-                label="✅ 导出成功！点击下载 .apkg 文件",
-                data=file_stream.getvalue(),
-                file_name=f"Anki_{st.session_state['title'][:10]}.apkg",
-                mime="application/octet-stream",
-            )
+            # 💡 核心修复：弃用 st.download_button，改用 Base64 原生 HTML 下载链接
+            anki_bytes = file_stream.getvalue()
+            b64 = base64.b64encode(anki_bytes).decode()
+            safe_title = st.session_state["title"][:10].replace(
+                " ", "_"
+            )  # 防止文件名里有空格导致乱码
+
+            download_html = f"""
+            <a href="data:application/octet-stream;base64,{b64}" download="Native特训舱_{safe_title}.apkg" 
+               style="display: inline-block; padding: 0.5em 1em; color: white; background-color: #FF4B4B; text-decoration: none; border-radius: 4px; font-family: sans-serif; font-weight: 500; margin-top: 10px;">
+               📥 导出成功！点击这里下载 Anki 卡片包 (.apkg)
+            </a>
+            """
+            st.markdown(download_html, unsafe_allow_html=True)
     st.markdown("---")
     # == Step 4: 逐句原音重现与魔鬼通关 (Shadowing) ==
     st.subheader("Step 4: 逐句魔鬼跟读通关 (Shadowing)")
@@ -1301,7 +1309,7 @@ if "text" in st.session_state and st.session_state["text"]:
             st.session_state["s6_has_fired_balloons"] = True
 
     st.markdown("---")
-# ==========================================
+    # ==========================================
     # == Step 7: 纯英文闲聊 (Free Talk) ==
     # ==========================================
     st.subheader("Step 7: 纯英文闲聊 (Free Talk)")
@@ -1310,7 +1318,9 @@ if "text" in st.session_state and st.session_state["text"]:
     )
 
     # 💡 核心防护 1：极其稳定的 API Key 雷达
-    current_api_key = st.secrets.get("GEMINI_API_KEY") or st.session_state.get("saved_api_key")
+    current_api_key = st.secrets.get("GEMINI_API_KEY") or st.session_state.get(
+        "saved_api_key"
+    )
 
     # 1. 初始化聊天记忆库与回合计数器
     if "s7_chat_history" not in st.session_state:
@@ -1328,7 +1338,9 @@ if "text" in st.session_state and st.session_state["text"]:
         # 💡 核心防护 2：给开场白语音加上防瘫痪保护
         with st.spinner("Preparing the opening..."):
             try:
-                tts_opener_file = generate_fallback_audio(opener_text, "chat_opener.mp3")
+                tts_opener_file = generate_fallback_audio(
+                    opener_text, "chat_opener.mp3"
+                )
                 st.session_state["s7_latest_audio"] = tts_opener_file
             except Exception as e:
                 st.error(f"⚠️ 开场语音生成失败: {e}")
@@ -1340,8 +1352,10 @@ if "text" in st.session_state and st.session_state["text"]:
             st.markdown(msg["content"])
 
     # 3. 自动播放 AI 的最新语音回复
-    if "s7_latest_audio" in st.session_state and st.session_state["s7_latest_audio"] and os.path.exists(
-        st.session_state["s7_latest_audio"]
+    if (
+        "s7_latest_audio" in st.session_state
+        and st.session_state["s7_latest_audio"]
+        and os.path.exists(st.session_state["s7_latest_audio"])
     ):
         st.audio(st.session_state["s7_latest_audio"])
 
@@ -1374,7 +1388,7 @@ if "text" in st.session_state and st.session_state["text"]:
                     # 重新挂载大模型，确保万无一失
                     genai.configure(api_key=current_api_key)
                     temp_model = genai.GenerativeModel("gemini-3.1-flash-lite-preview")
-                    
+
                     # 第一步：保存录音和准备 Prompt (本地操作，不会断网)
                     with tempfile.NamedTemporaryFile(
                         delete=False, suffix=".wav"
@@ -1417,7 +1431,9 @@ if "text" in st.session_state and st.session_state["text"]:
                         try:
                             # 这些容易断开的操作，都用 temp_model
                             audio_file = genai.upload_file(path=temp_audio_path)
-                            response = temp_model.generate_content([chat_prompt, audio_file])
+                            response = temp_model.generate_content(
+                                [chat_prompt, audio_file]
+                            )
 
                             # 拿到结果，清洗格式
                             reply_text = (
@@ -1428,13 +1444,17 @@ if "text" in st.session_state and st.session_state["text"]:
                         except Exception as e:
                             error_msg = str(e)
                             if "429" in error_msg or "Quota" in error_msg:
-                                st.warning("⏳ 你的朋友正在喝水，触发频率限制，请稍等片刻后再发消息。")
+                                st.warning(
+                                    "⏳ 你的朋友正在喝水，触发频率限制，请稍等片刻后再发消息。"
+                                )
                                 break
                             elif attempt < max_retries - 1:
                                 time.sleep(2)
                                 continue
                             else:
-                                st.error(f"⚠️ 网络代理极不稳定，已重试 3 次仍被强制中断连接: {e}")
+                                st.error(
+                                    f"⚠️ 网络代理极不稳定，已重试 3 次仍被强制中断连接: {e}"
+                                )
                                 break
 
                     # 第三步：如果成功拿到了回复，执行记忆保存和网页刷新
@@ -1465,11 +1485,11 @@ if "text" in st.session_state and st.session_state["text"]:
                         os.remove(temp_audio_path)
                         # 💡 极其重要：解锁音频记忆，为下一轮录音腾出空间！
                         del st.session_state["s7_audio_bytes_locked"]
-                        
+
                         st.rerun()
 
         elif st.session_state.get("s7_audio_bytes_locked") and not current_api_key:
-             st.warning("⚠️ 录音已准备好，但请先配置 API Key 才能发送哦！")
+            st.warning("⚠️ 录音已准备好，但请先配置 API Key 才能发送哦！")
 
     else:
         # 当 6 轮满员后，隐藏录音区，展示终极撒花庆祝
