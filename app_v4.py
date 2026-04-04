@@ -1240,12 +1240,14 @@ if "text" in st.session_state and st.session_state["text"]:
     st.write("")
 
     # --- 2. 录音与提交区 (核心交互) ---
+    # 💡 核心修复：获取当前文章的 ID，让每次加载新文章时录音键都有独一无二的标识，防止组件消失
+    current_art_id = st.session_state.get("current_id", "default_retell")
+
     retell_audio_info = mic_recorder(
         start_prompt="▶️ 开始全篇复述",
         stop_prompt="⏹️ 结束复述并试听",
-        key="retell_recorder",
+        key=f"retell_recorder_{current_art_id}",
     )
-
     # 💡 核心防护2：一旦拿到录音，立刻锁进长期记忆，防止按钮刷新消失！
     if retell_audio_info:
         st.session_state["s6_audio_bytes_locked"] = retell_audio_info["bytes"]
