@@ -1101,16 +1101,10 @@ if "text" in st.session_state and st.session_state["text"]:
                         ).strip()
 
                         os.remove(temp_audio_path)
-                      
 
-                        # 💡 核心修复 4：打分完毕后，销毁保险箱里的旧音频！
                         if lock_key in st.session_state:
                             del st.session_state[lock_key]
 
-                        # 🎯 核心逻辑：分数判定与过关机制
-                        if score >= 90:
-
-                        # 🎯 核心逻辑：分数判定与过关机制
                         if score >= 90:
                             st.session_state["s4_feedback"] = ""
                             st.session_state["s4_current_index"] += 1
