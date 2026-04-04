@@ -886,64 +886,64 @@ if "text" in st.session_state and st.session_state["text"]:
                     st.session_state["vocab_list"].pop(idx)
                     st.rerun()  # 强制刷新页面，让这行字瞬间消失
 
-        # --- 核心：生成 Anki .apkg 文件 ---
-        if st.button("💾 一键导出为 Anki 牌组 (.apkg)"):
-            # 定义 Anki 卡片模板 (正面：原句挖空/单词，背面：释义+音标+原句)
-            my_model = genanki.Model(
-                1607392319,
-                "Native 特训舱词汇模型",
+        # --- 核心：自动生成 Anki .apkg 文件链接 ---
+        # 💡 终极修复：直接去掉 st.button，每次页面刷新都实时渲染下载链接，彻底稳住页面结构！
+
+        # 定义 Anki 卡片模板 (正面：原句挖空/单词，背面：释义+音标+原句)
+        my_model = genanki.Model(
+            1607392319,
+            "Native 特训舱词汇模型",
+            fields=[
+                {"name": "Word"},
+                {"name": "Phonetic"},
+                {"name": "Meaning"},
+                {"name": "Context"},
+            ],
+            templates=[
+                {
+                    "name": "Card 1",
+                    "qfmt": '<h2 style="text-align:center;">{{Word}}</h2><br><p style="text-align:center; color:gray;">{{Context}}</p>',
+                    "afmt": '{{FrontSide}}<hr id="answer"><h3 style="text-align:center;">{{Phonetic}}</h3><h3 style="text-align:center; color:#e84118;">{{Meaning}}</h3>',
+                },
+            ],
+        )
+
+        # 创建牌组
+        my_deck = genanki.Deck(
+            2059400110, f"Native特训舱_{st.session_state['title'][:10]}"
+        )
+
+        # 将词汇塞进卡片并放入牌组
+        for vocab in st.session_state["vocab_list"]:
+            my_note = genanki.Note(
+                model=my_model,
                 fields=[
-                    {"name": "Word"},
-                    {"name": "Phonetic"},
-                    {"name": "Meaning"},
-                    {"name": "Context"},
-                ],
-                templates=[
-                    {
-                        "name": "Card 1",
-                        "qfmt": '<h2 style="text-align:center;">{{Word}}</h2><br><p style="text-align:center; color:gray;">{{Context}}</p>',
-                        "afmt": '{{FrontSide}}<hr id="answer"><h3 style="text-align:center;">{{Phonetic}}</h3><h3 style="text-align:center; color:#e84118;">{{Meaning}}</h3>',
-                    },
+                    vocab["word"],
+                    vocab["phonetic"],
+                    vocab["meaning"],
+                    vocab["sentence"],
                 ],
             )
+            my_deck.add_note(my_note)
 
-            # 创建牌组
-            my_deck = genanki.Deck(
-                2059400110, f"Native特训舱_{st.session_state['title'][:10]}"
-            )
+        # 将牌组打包写入内存
+        package = genanki.Package(my_deck)
+        file_stream = io.BytesIO()
+        package.write_to_file(file_stream)
 
-            # 将词汇塞进卡片并放入牌组
-            for vocab in st.session_state["vocab_list"]:
-                my_note = genanki.Note(
-                    model=my_model,
-                    fields=[
-                        vocab["word"],
-                        vocab["phonetic"],
-                        vocab["meaning"],
-                        vocab["sentence"],
-                    ],
-                )
-                my_deck.add_note(my_note)
+        # 改用 Base64 原生 HTML 下载链接
+        anki_bytes = file_stream.getvalue()
+        b64 = base64.b64encode(anki_bytes).decode()
+        safe_title = st.session_state["title"][:10].replace(" ", "_")
 
-            # 将牌组打包写入内存
-            package = genanki.Package(my_deck)
-            file_stream = io.BytesIO()
-            package.write_to_file(file_stream)
+        download_html = f"""
+        <a href="data:application/octet-stream;base64,{b64}" download="Native特训舱_{safe_title}.apkg" 
+            style="display: inline-block; padding: 0.5em 1em; color: white; background-color: #FF4B4B; text-decoration: none; border-radius: 4px; font-family: sans-serif; font-weight: 500; margin-top: 10px;">
+            📥 牌组已就绪！点击这里下载 Anki 卡片包 (.apkg)
+        </a>
+        """
+        st.markdown(download_html, unsafe_allow_html=True)
 
-            # 💡 核心修复：弃用 st.download_button，改用 Base64 原生 HTML 下载链接
-            anki_bytes = file_stream.getvalue()
-            b64 = base64.b64encode(anki_bytes).decode()
-            safe_title = st.session_state["title"][:10].replace(
-                " ", "_"
-            )  # 防止文件名里有空格导致乱码
-
-            download_html = f"""
-            <a href="data:application/octet-stream;base64,{b64}" download="Native特训舱_{safe_title}.apkg" 
-               style="display: inline-block; padding: 0.5em 1em; color: white; background-color: #FF4B4B; text-decoration: none; border-radius: 4px; font-family: sans-serif; font-weight: 500; margin-top: 10px;">
-               📥 导出成功！点击这里下载 Anki 卡片包 (.apkg)
-            </a>
-            """
-            st.markdown(download_html, unsafe_allow_html=True)
     st.markdown("---")
     # == Step 4: 逐句原音重现与魔鬼通关 (Shadowing) ==
     st.subheader("Step 4: 逐句魔鬼跟读通关 (Shadowing)")
