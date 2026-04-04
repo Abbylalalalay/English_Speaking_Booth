@@ -1019,29 +1019,32 @@ if "text" in st.session_state and st.session_state["text"]:
             st.warning("⚠️ 暂无示范发音，但你依然可以直接看上面的句子录音打卡！")
 
         # ==========================================
-        # 4. 用户录音组件 (加入 current_id 防止切换文章时消失！)
+        # 4. 用户录音组件
         # ==========================================
-        # 💡 核心修复：拿到当前文章的专属 ID
         current_art_id = st.session_state.get("current_id", "default_s4")
 
         shadow_audio_info = mic_recorder(
             start_prompt="▶️ 开始跟读",
             stop_prompt="⏹️ 结束跟读",
-            # 💡 核心修复：把 current_art_id 加进 key 里，让每次的新文章都拥有全新组件！
             key=f"shadow_rec_{current_art_id}_{curr_idx}_{st.session_state['s4_retry_count']}",
         )
-        # 5. 动态展示提交区域 (录音完成后自动浮现)
-        # 使用 get 方法安全获取 api_key，防止因作用域问题报错
+
+        # 💡 核心修复 1：拿到稍纵即逝的录音后，立刻锁进长期记忆保险箱！
+        lock_key = f"s4_audio_lock_{curr_idx}"
+        if shadow_audio_info:
+            st.session_state[lock_key] = shadow_audio_info["bytes"]
+
+        # 5. 动态展示提交区域
         current_api_key = (
             locals().get("api_key")
             or globals().get("api_key")
             or st.secrets.get("GEMINI_API_KEY")
         )
 
-        if shadow_audio_info and current_api_key:
-            shadow_audio_bytes = shadow_audio_info["bytes"]
+        # 💡 核心修复 2：现在的判断条件，只看保险箱里有没有锁好的音频！
+        if st.session_state.get(lock_key) and current_api_key:
             st.markdown("**✅ 你的录音：**")
-            st.audio(shadow_audio_bytes, format="audio/wav")
+            st.audio(st.session_state[lock_key], format="audio/wav")
 
             if st.button(
                 "🚀 提交给教练打分",
@@ -1052,7 +1055,8 @@ if "text" in st.session_state and st.session_state["text"]:
                         with tempfile.NamedTemporaryFile(
                             delete=False, suffix=".wav"
                         ) as temp_audio:
-                            temp_audio.write(shadow_audio_bytes)
+                            # 💡 核心修复 3：从保险箱里读取音频发给 AI
+                            temp_audio.write(st.session_state[lock_key])
                             temp_audio_path = temp_audio.name
 
                         audio_file = genai.upload_file(path=temp_audio_path)
@@ -1097,6 +1101,14 @@ if "text" in st.session_state and st.session_state["text"]:
                         ).strip()
 
                         os.remove(temp_audio_path)
+                      
+
+                        # 💡 核心修复 4：打分完毕后，销毁保险箱里的旧音频！
+                        if lock_key in st.session_state:
+                            del st.session_state[lock_key]
+
+                        # 🎯 核心逻辑：分数判定与过关机制
+                        if score >= 90:
 
                         # 🎯 核心逻辑：分数判定与过关机制
                         if score >= 90:
