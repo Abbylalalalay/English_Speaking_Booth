@@ -1019,14 +1019,17 @@ if "text" in st.session_state and st.session_state["text"]:
             st.warning("⚠️ 暂无示范发音，但你依然可以直接看上面的句子录音打卡！")
 
         # ==========================================
-        # 4. 用户录音组件 (极其关键：必须和上面的 st.markdown 左边对齐！)
+        # 4. 用户录音组件 (加入 current_id 防止切换文章时消失！)
         # ==========================================
+        # 💡 核心修复：拿到当前文章的专属 ID
+        current_art_id = st.session_state.get("current_id", "default_s4")
+
         shadow_audio_info = mic_recorder(
             start_prompt="▶️ 开始跟读",
             stop_prompt="⏹️ 结束跟读",
-            key=f"shadow_rec_{curr_idx}_{st.session_state['s4_retry_count']}",
+            # 💡 核心修复：把 current_art_id 加进 key 里，让每次的新文章都拥有全新组件！
+            key=f"shadow_rec_{current_art_id}_{curr_idx}_{st.session_state['s4_retry_count']}",
         )
-
         # 5. 动态展示提交区域 (录音完成后自动浮现)
         # 使用 get 方法安全获取 api_key，防止因作用域问题报错
         current_api_key = (
