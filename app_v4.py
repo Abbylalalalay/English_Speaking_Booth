@@ -1270,30 +1270,39 @@ if "text" in st.session_state and st.session_state["text"]:
     st.write("")
 
     # --- 2. 录音与提交区 (核心交互) ---
-    # 💡 核心修复：获取当前文章的 ID，让每次加载新文章时录音键都有独一无二的标识，防止组件消失
+
+    # 💡 新增机制：给 Step 6 也加上一个独立的“重生计数器”
+    if "s6_retry_count" not in st.session_state:
+        st.session_state["s6_retry_count"] = 0
+
     current_art_id = st.session_state.get("current_id", "default_retell")
 
+    # 💡 核心修复：把重生计数器加进 Key 里！
     retell_audio_info = mic_recorder(
         start_prompt="▶️ 开始全篇复述",
         stop_prompt="⏹️ 结束复述并试听",
-        key=f"retell_recorder_{current_art_id}",
+        key=f"s6_retell_rec_{current_art_id}_{st.session_state['s6_retry_count']}",
     )
-    # 💡 核心防护2：一旦拿到录音，立刻锁进长期记忆，防止按钮刷新消失！
+
+    # 💡 核心防护：一旦拿到录音，立刻锁进长期记忆
     if retell_audio_info:
         st.session_state["s6_audio_bytes_locked"] = retell_audio_info["bytes"]
 
-    # 注意这里的 if 判断变了：基于长期记忆来判断，而不是短暂的组件状态
+    # 基于长期记忆来判断是否显示提交按钮
     if st.session_state.get("s6_audio_bytes_locked") and current_api_key:
         st.markdown("**✅ 你的复述录音：**")
         st.audio(st.session_state["s6_audio_bytes_locked"], format="audio/wav")
 
-        if st.button("🚀 提交终极复述进行批改", key="btn_retell"):
+        # 💡 连同提交按钮的名字也加上计数器，防止状态残留
+        if st.button(
+            "🚀 提交终极复述进行批改",
+            key=f"btn_retell_{st.session_state['s6_retry_count']}",
+        ):
             with st.spinner("AI 考官正在全面评估中..."):
                 try:
                     with tempfile.NamedTemporaryFile(
                         delete=False, suffix=".wav"
                     ) as temp_audio:
-                        # 💡 这里也要改成从长期记忆里读取音频去打分
                         temp_audio.write(st.session_state["s6_audio_bytes_locked"])
                         temp_audio_path = temp_audio.name
 
@@ -1320,15 +1329,14 @@ if "text" in st.session_state and st.session_state["text"]:
 
                     os.remove(temp_audio_path)
 
-                    # 💡 批改完成后，清空音频记忆，避免下次进来直接显示旧录音
+                    # 💡 核心修复终结步：批改完成后，清空音频记忆，并让“重生计数器”加 1！
                     del st.session_state["s6_audio_bytes_locked"]
+                    st.session_state["s6_retry_count"] += 1
+
                     st.rerun()
 
                 except Exception as e:
                     st.error(f"提交失败: {e}")
-
-    elif st.session_state.get("s6_audio_bytes_locked") and not current_api_key:
-        st.warning("⚠️ 录音已完成，但请先在左侧边栏配置 API Key 才能提交批改！")
 
     # --- 3. 结果展示区 ---
     if "s6_feedback" in st.session_state:
