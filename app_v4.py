@@ -1,7 +1,7 @@
 import streamlit as st
 import requests
 from bs4 import BeautifulSoup
-import time  # 👈 确保这里有 time
+import time
 import os
 import subprocess
 import tempfile
@@ -20,6 +20,7 @@ import tempfile
 from datetime import datetime
 import requests
 from bs4 import BeautifulSoup
+import glob  # 专门用来找文件
 
 import streamlit as st
 import google.generativeai as genai
@@ -178,6 +179,26 @@ def clear_training_states():
             keys_to_delete.append(key)
     for key in keys_to_delete:
         del st.session_state[key]
+
+    # 💡 强行刷新所有容易卡死的组件的随机种子
+    st.session_state["component_refresh_seed"] = str(time.time()).replace(".", "")
+
+    # ==========================================
+    # 🧹 自动垃圾回收机制 (静默清理硬盘旧音频)
+    # ==========================================
+    # 寻找当前文件夹下所有 AI 生成的音频文件
+    audio_files_to_delete = (
+        glob.glob("demo_*.mp3")  # Step 4 逐句示范音
+        + glob.glob("chat_*.mp3")  # Step 7 聊天回复音
+        + glob.glob("main_fallback*.mp3")  # 兜底的主音频
+    )
+
+    for file_path in audio_files_to_delete:
+        try:
+            os.remove(file_path)
+        except Exception:
+            # 如果文件刚好被占用或不存在，直接跳过，绝不报错中断程序
+            pass
 
 
 # 4. 切换文章的“需要复习”状态 (Callback 回调函数)
