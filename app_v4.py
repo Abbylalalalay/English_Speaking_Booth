@@ -1084,7 +1084,7 @@ if "text" in st.session_state and st.session_state["text"]:
 
                         # 💡 核心 Prompt：强制 AI 第一行只输出数字分数
                         shadow_prompt = f"""
-                        你是一个极其严苛的美国 Native 英语口语教练。
+                        你是一个以帮助学生提升英语口语发音为目的的美国 Native 英语口语教练。
                         学生的跟读目标文本是：“{target_sentence}”
                         请听附件中学生的录音。
                         
