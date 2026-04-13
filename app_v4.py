@@ -90,9 +90,14 @@ def fetch_sivers_article(url):
         r.raise_for_status()
         soup = BeautifulSoup(r.text, "html.parser")
 
-        # 1. 抓取标题 (通常在 <h1> 标签里)
-        h1 = soup.find("h1")
-        title = h1.text.strip() if h1 else "Sivers Article"
+        # 1. 抓取标题 (💡 放弃不可靠的 h1，改用浏览器顶部的 title 标签并进行清洗)
+        title_tag = soup.find("title")
+        if title_tag:
+            # 举例：把 "How to Live | Derek Sivers" 按照 "|" 切开
+            # [0] 拿走左边的 "How to Live "，并用 strip() 洗掉两端的空格
+            title = title_tag.text.split("|")[0].strip()
+        else:
+            title = "Sivers Article"
 
         # 2. 抓取正文 (Sivers 的网页极其干净，直接抓 <article> 或所有的 <p> 标签)
         article_body = soup.find("article")
