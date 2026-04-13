@@ -176,6 +176,17 @@ def save_history(history_dict):
         st.error(f"同步云端数据库失败: {e}")
 
 
+# ==========================================
+# 💡 新增：从 Supabase 彻底删除单条历史记录的函数
+# ==========================================
+def delete_history_item(article_id):
+    try:
+        # 告诉云端数据库：删掉 id 等于当前 article_id 的那行数据
+        supabase.table("history").delete().eq("id", article_id).execute()
+    except Exception as e:
+        st.error(f"删除云端记录失败: {e}")
+
+
 # 3. 清理状态缓存的辅助函数（切换文章时必须清理旧数据）
 def clear_training_states():
     keys_to_delete = []
@@ -371,14 +382,11 @@ with st.sidebar:
     else:
         # 倒序排列，今天刚练的在最上面
         for aid, info in reversed(list(history.items())):
-            # 读取标记状态，兼容旧数据
             needs_review = info.get("needs_review", False)
-            # 动态图标：如果被标记了就显示醒目的 ⭐，否则显示普通的 ✅
             icon = "⭐" if needs_review else "✅"
 
             with st.expander(f"{icon} {info['date'][:10]} | {info['title'][:15]}"):
 
-                # 💡 打标 Checkbox，点击后自动触发上面的 toggle_review 函数
                 st.checkbox(
                     "⭐ 标为需要重点复习",
                     value=needs_review,
@@ -387,17 +395,27 @@ with st.sidebar:
                     args=(aid,),
                 )
 
-                if st.button(
-                    "🔄 重新挑战这篇", key=f"retry_{aid}", use_container_width=True
-                ):
-                    # 💡 修复了之前重复粘贴两遍的 Bug
-                    st.session_state["text"] = info["text"]
-                    st.session_state["title"] = info["title"]
-                    st.session_state["audio_url"] = info.get("audio_url", "")
-                    st.session_state["current_id"] = aid
+                # 💡 核心修改：使用列布局，把“重新挑战”和“删除”并排放在一起
+                col_retry, col_del = st.columns([4, 1])
 
-                    clear_training_states()
-                    st.rerun()
+                with col_retry:
+                    if st.button(
+                        "🔄 重新挑战", key=f"retry_{aid}", use_container_width=True
+                    ):
+                        st.session_state["text"] = info["text"]
+                        st.session_state["title"] = info["title"]
+                        st.session_state["audio_url"] = info.get("audio_url", "")
+                        st.session_state["current_id"] = aid
+                        clear_training_states()
+                        st.rerun()
+
+                with col_del:
+                    # 💡 新增的删除按钮
+                    if st.button("🗑️", key=f"del_hist_{aid}", help="永久删除此记录"):
+                        # 1. 呼叫刚刚写的函数，清理云端数据
+                        delete_history_item(aid)
+                        # 2. 强制页面刷新，系统会自动重新拉取最新的数据库，这篇文章就瞬间消失了！
+                        st.rerun()
 
 
 # --- 1. 核心逻辑：网页抓取与兜底音频 ---
