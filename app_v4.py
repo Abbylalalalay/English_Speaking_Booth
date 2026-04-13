@@ -380,8 +380,20 @@ with st.sidebar:
     if not history:
         st.caption("空空如也，赶紧开始你的第一篇吧！")
     else:
-        # 倒序排列，今天刚练的在最上面
-        for aid, info in reversed(list(history.items())):
+        # 💡 核心修复：智能双重排序引擎
+        # 规则 1：标了 ⭐ (needs_review=True) 的绝对优先置顶
+        # 规则 2：同样是 ⭐ 或者都没 ⭐ 的，严格按时间 (date) 从新到旧排列
+        sorted_history = sorted(
+            history.items(),
+            key=lambda item: (
+                item[1].get("needs_review", False),
+                item[1].get("date", ""),
+            ),
+            reverse=True,  # reverse=True 保证了 True 排在 False 前面，新时间排在旧时间前面
+        )
+
+        # 用排好序的列表替代原来的 reversed(...)
+        for aid, info in sorted_history:
             needs_review = info.get("needs_review", False)
             icon = "⭐" if needs_review else "✅"
 
