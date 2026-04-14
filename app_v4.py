@@ -259,7 +259,7 @@ with st.sidebar:
     if api_key:
         genai.configure(api_key=api_key)
         # 💡 修复模型名称为正确的版本
-        model = genai.GenerativeModel("gemini-3.1-flash-lite-preview")
+        model = genai.GenerativeModel("gemini-3-flash-preview")
 
     st.markdown("---")
 
@@ -1288,7 +1288,7 @@ if "text" in st.session_state and st.session_state["text"]:
                 """
                 if current_api_key:
                     genai.configure(api_key=current_api_key)
-                    temp_model = genai.GenerativeModel("gemini-3.1-flash-lite-preview")
+                    temp_model = genai.GenerativeModel("gemini-3-flash-preview")
                     kw_response = temp_model.generate_content(kw_prompt)
                     st.session_state["s6_keywords"] = (
                         kw_response.text.replace("**", "").replace("#", "").strip()
@@ -1342,7 +1342,7 @@ if "text" in st.session_state and st.session_state["text"]:
                         temp_audio_path = temp_audio.name
 
                     genai.configure(api_key=current_api_key)
-                    temp_model = genai.GenerativeModel("gemini-3.1-flash-lite-preview")
+                    temp_model = genai.GenerativeModel("gemini-3-flash-preview")
                     audio_file = genai.upload_file(path=temp_audio_path)
 
                     retell_prompt = f"""
@@ -1462,7 +1462,7 @@ if "text" in st.session_state and st.session_state["text"]:
                 with st.spinner("你的朋友正在思考并回复..."):
                     # 重新挂载大模型，确保万无一失
                     genai.configure(api_key=current_api_key)
-                    temp_model = genai.GenerativeModel("gemini-3.1-flash-lite-preview")
+                    temp_model = genai.GenerativeModel("gemini-3-flash-preview")
 
                     # 第一步：保存录音和准备 Prompt (本地操作，不会断网)
                     with tempfile.NamedTemporaryFile(
