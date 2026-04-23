@@ -44,36 +44,83 @@ supabase = init_connection()
 HISTORY_FILE = "learning_history.json"
 
 
-# 1. 自动抓取 Sivers 博客的所有文章链接 (加缓存，每天只爬一次目录)
+# 1. 自动抓取 Sivers 博客的所有文章链接 (已升级为：两步深度爬取架构)
 @st.cache_data(ttl=86400)
 def get_all_sivers_links():
     try:
-        url = "https://sive.rs/blog"
-        # 💡 穿上隐身衣：伪装成真实的 Mac/Chrome 浏览器
+        base_url = "https://sive.rs"
         headers = {
             "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
         }
-        # 把超时时间拉长到 15 秒，给代理一点反应时间
-        r = requests.get(url, headers=headers, timeout=15)
-        r.raise_for_status()
 
+        # ==========================================
+        # 🕷️ 阶段 1：扫描主页，收集所有的“分类”或“入口”链接
+        # ==========================================
+        r = requests.get(base_url + "/blog", headers=headers, timeout=15)
+        r.raise_for_status()
         soup = BeautifulSoup(r.text, "html.parser")
-        links = []
+
+        entry_links = []
         for a in soup.find_all("a", href=True):
             href = a["href"]
-            # 精准过滤
+            # 收集主页上所有的内部跳转链接（排除已知极其明确的非博客导航）
             if (
                 href.startswith("/")
                 and len(href) > 2
                 and not href.startswith(
-                    ("/blog", "/contact", "/about", "/projects", "/book")
+                    ("/contact", "/about", "/projects", "/book", "/podcast", "/music")
                 )
             ):
-                links.append("https://sive.rs" + href)
-        return list(set(links))
+                entry_links.append(base_url + href)
+
+        # 使用 set 初步去重，得到干净的分类入口列表
+        entry_links = list(set(entry_links))
+
+        # ==========================================
+        # 🕸️ 阶段 2：潜入每一个分类页面，打捞真正的文章链接
+        # ==========================================
+        all_article_links = (
+            set()
+        )  # 核心：使用 set，因为同一篇文章可能会出现在不同分类里
+
+        for entry_url in entry_links:
+            try:
+                # 依次潜入每一个分类页
+                cat_r = requests.get(entry_url, headers=headers, timeout=10)
+                cat_soup = BeautifulSoup(cat_r.text, "html.parser")
+
+                # 在分类页的深水区寻找文章
+                for a in cat_soup.find_all("a", href=True):
+                    href = a["href"]
+                    # Sivers 的文章通常是极短的根目录链接 (如 /aim, /led)
+                    # 强力过滤掉所有的菜单导航、分类目录标签等干扰项
+                    if (
+                        href.startswith("/")
+                        and len(href) > 2
+                        and not href.startswith(
+                            (
+                                "/blog",
+                                "/contact",
+                                "/about",
+                                "/projects",
+                                "/book",
+                                "/tab",
+                                "/category",
+                                "/podcast",
+                                "/music",
+                            )
+                        )
+                    ):
+                        all_article_links.add(base_url + href)
+
+            except Exception as e:
+                # 某个分类页如果是死链或者超时，直接跳过，绝不让整个程序崩溃
+                continue
+
+        # 把最终的大集合转换回列表返回
+        return list(all_article_links)
 
     except Exception as e:
-        # 💡 不要静默失败，把真实的底层网络报错直接打在屏幕上！
         st.error(f"🚨 底层网络报错抓取失败: {e}")
         return []
 
