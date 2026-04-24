@@ -308,49 +308,64 @@ with st.sidebar:
             )
             if unpracticed_links:
                 if st.button("🎲 抽取今日新文章 (优先原声)", use_container_width=True):
-                    with st.spinner("正在满世界寻找带有 Native 原声的优质文章..."):
+                    with st.spinner("正在满世界寻找长度完美的 Native 原声文章..."):
                         found_article = None
                         fallback_article = None
 
-                        # 💡 核心机制：最多进行 5 次静默连抽
-                        max_attempts = 5
-                        available_links = unpracticed_links.copy()  # 复制一份用来抽卡
+                        # 💡 核心升级 1：为了防止连续抽到长文导致失败，把最大静默连抽次数提升到 15 次
+                        max_attempts = 15
+                        available_links = unpracticed_links.copy()
 
-                        for _ in range(max_attempts):
+                        for i in range(max_attempts):
                             if not available_links:
                                 break
 
                             chosen_url = random.choice(available_links)
-                            available_links.remove(chosen_url)  # 抽过的踢出去，避免重复
+                            available_links.remove(chosen_url)  # 抽过的踢出去
 
                             title, text, audio_url = fetch_sivers_article(chosen_url)
 
+                            # 💡 核心升级 2：精准的字数安检门 (大概 150~800 词最适合 5 分钟特训)
                             if text:
-                                if audio_url:
-                                    # 🎉 中大奖了！找到了带原声的文章，立刻停止抽卡！
-                                    found_article = (chosen_url, title, text, audio_url)
-                                    break
-                                else:
-                                    # 没有原声，先委屈一下当备胎（存下第一篇有效的即可）
-                                    if not fallback_article:
-                                        fallback_article = (
+                                word_count = len(text.split())
+
+                                # 如果字数合格，才允许进入候选池
+                                if 50 <= word_count <= 800:
+                                    if audio_url:
+                                        # 🎉 完美！有原声且长度合适，立刻停止抽卡！
+                                        found_article = (
                                             chosen_url,
                                             title,
                                             text,
                                             audio_url,
                                         )
+                                        break
+                                    else:
+                                        # 没有原声，先委屈一下当备胎
+                                        if not fallback_article:
+                                            fallback_article = (
+                                                chosen_url,
+                                                title,
+                                                text,
+                                                audio_url,
+                                            )
+                                else:
+                                    # 💡 字数不合格，偷偷扔掉并打印一条静默日志（不在页面显示）
+                                    pass
 
-                        # 💡 最终决断：优先用原声的，实在没有就用备胎
+                        # 💡 最终决断
                         final_article = (
                             found_article if found_article else fallback_article
                         )
 
                         if final_article:
                             final_url, title, text, audio_url = final_article
+                            word_count = len(text.split())  # 算一下最终字数
 
-                            # 装载进系统
                             st.session_state["text"] = text
-                            st.session_state["title"] = title
+                            st.session_state["title"] = (
+                                f"{title} ({word_count} words)"  # 💡 小彩蛋：在标题后显示字数
+                            )
                             st.session_state["audio_url"] = audio_url
                             st.session_state["current_id"] = final_url
 
@@ -365,9 +380,9 @@ with st.sidebar:
                             clear_training_states()
                             st.rerun()
                         else:
-                            st.error("抓取失败，请稍后重试。")
+                            st.error("连续抽了 15 次都没找到短篇原声文章，请再试一次！")
             else:
-                st.success("🏆 神级成就！Sivers 的博客全库已被你刷穿！")
+                st.success("这样不行哈")
         else:
             st.error("网络不畅，获取目录失败。")
 
