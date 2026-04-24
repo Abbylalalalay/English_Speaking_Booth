@@ -44,84 +44,52 @@ supabase = init_connection()
 HISTORY_FILE = "learning_history.json"
 
 
-# 1. 自动抓取 Sivers 博客的所有文章链接 (已升级为：两步深度爬取架构)
+# 1. 自动抓取 Sivers 博客所有文章 (🚀 XML 降维打击版)
 @st.cache_data(ttl=86400)
 def get_all_sivers_links():
     try:
-        base_url = "https://sive.rs"
+        # 💡 直接请求他专为极客保留的底层数据源，这个链接绝对打得开！
+        url = "https://sive.rs/articles.xml"
         headers = {
-            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"
         }
 
-        # ==========================================
-        # 🕷️ 阶段 1：扫描主页，收集所有的“分类”或“入口”链接
-        # ==========================================
-        r = requests.get(base_url + "/blog", headers=headers, timeout=15)
+        r = requests.get(url, headers=headers, timeout=15)
         r.raise_for_status()
-        soup = BeautifulSoup(r.text, "html.parser")
 
-        entry_links = []
-        for a in soup.find_all("a", href=True):
-            href = a["href"]
-            # 收集主页上所有的内部跳转链接（排除已知极其明确的非博客导航）
-            if (
-                href.startswith("/")
-                and len(href) > 2
-                and not href.startswith(
-                    ("/contact", "/about", "/projects", "/book", "/podcast", "/music")
-                )
-            ):
-                entry_links.append(base_url + href)
+        # 💡 极客玩法：XML 数据非常纯粹，直接用正则表达式提取所有的 https://sive.rs/xxx 链接
+        all_urls = re.findall(r"https://sive\.rs/[a-zA-Z0-9-]+", r.text)
 
-        # 使用 set 初步去重，得到干净的分类入口列表
-        entry_links = list(set(entry_links))
+        # 使用 set 瞬间去重
+        unique_urls = list(set(all_urls))
 
-        # ==========================================
-        # 🕸️ 阶段 2：潜入每一个分类页面，打捞真正的文章链接
-        # ==========================================
-        all_article_links = (
-            set()
-        )  # 核心：使用 set，因为同一篇文章可能会出现在不同分类里
+        # 设立黑名单，精准剔除混进来的非文章导航路径
+        blacklist = [
+            "/blog",
+            "/contact",
+            "/about",
+            "/projects",
+            "/book",
+            "/podcast",
+            "/music",
+            "/tab",
+            "/category",
+            "/feeds",
+        ]
 
-        for entry_url in entry_links:
-            try:
-                # 依次潜入每一个分类页
-                cat_r = requests.get(entry_url, headers=headers, timeout=10)
-                cat_soup = BeautifulSoup(cat_r.text, "html.parser")
+        final_links = []
+        for link in unique_urls:
+            # 取出链接的路径部分，比如把 https://sive.rs/about 变成 /about
+            path = link.replace("https://sive.rs", "")
 
-                # 在分类页的深水区寻找文章
-                for a in cat_soup.find_all("a", href=True):
-                    href = a["href"]
-                    # Sivers 的文章通常是极短的根目录链接 (如 /aim, /led)
-                    # 强力过滤掉所有的菜单导航、分类目录标签等干扰项
-                    if (
-                        href.startswith("/")
-                        and len(href) > 2
-                        and not href.startswith(
-                            (
-                                "/blog",
-                                "/contact",
-                                "/about",
-                                "/projects",
-                                "/book",
-                                "/tab",
-                                "/category",
-                                "/podcast",
-                                "/music",
-                            )
-                        )
-                    ):
-                        all_article_links.add(base_url + href)
+            # 放行条件：路径长度大于1（排除首页），且绝不能是以黑名单里的词汇开头
+            if len(path) > 1 and not any(path.startswith(b) for b in blacklist):
+                final_links.append(link)
 
-            except Exception as e:
-                # 某个分类页如果是死链或者超时，直接跳过，绝不让整个程序崩溃
-                continue
-
-        # 把最终的大集合转换回列表返回
-        return list(all_article_links)
+        return final_links
 
     except Exception as e:
-        st.error(f"🚨 底层网络报错抓取失败: {e}")
+        st.error(f"🚨 抓取底层数据源失败: {e}")
         return []
 
 
