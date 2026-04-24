@@ -44,26 +44,28 @@ supabase = init_connection()
 HISTORY_FILE = "learning_history.json"
 
 
-# 1. 自动抓取 Sivers 博客所有文章 (🚀 XML 降维打击版)
+# 1. 自动抓取 Sivers 博客所有文章 (Sitemap 抓取法)
 @st.cache_data(ttl=86400)
 def get_all_sivers_links():
     try:
-        # 💡 直接请求他专为极客保留的底层数据源，这个链接绝对打得开！
-        url = "https://sive.rs/articles.xml"
+        # 💡 直接请求他交给 Google 的底层全量网站地图
+        url = "https://sive.rs/sitemap.xml"
         headers = {
-            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
         }
 
         r = requests.get(url, headers=headers, timeout=15)
         r.raise_for_status()
 
-        # 💡 极客玩法：XML 数据非常纯粹，直接用正则表达式提取所有的 https://sive.rs/xxx 链接
-        all_urls = re.findall(r"https://sive\.rs/[a-zA-Z0-9-]+", r.text)
+        # 使用 BeautifulSoup 解析 XML
+        # 注意：这里需要确保你安装了 lxml 或者直接用 html.parser 强解
+        soup = BeautifulSoup(r.text, "html.parser")
 
-        # 使用 set 瞬间去重
-        unique_urls = list(set(all_urls))
+        # sitemap 中的链接都存放在 <loc> 标签里
+        all_locs = soup.find_all("loc")
+        all_urls = [loc.text for loc in all_locs]
 
-        # 设立黑名单，精准剔除混进来的非文章导航路径
+        # 设立黑名单，剔除那些非文章页面以及其他语言版本
         blacklist = [
             "/blog",
             "/contact",
@@ -75,21 +77,31 @@ def get_all_sivers_links():
             "/tab",
             "/category",
             "/feeds",
+            "/ja",
+            "/ko",
+            "/pt",
+            "/es",
+            "/sv",
+            "/fr",
+            "/hi",
+            "/ru",
+            "/zh",  # 排除翻译版本
         ]
 
         final_links = []
-        for link in unique_urls:
-            # 取出链接的路径部分，比如把 https://sive.rs/about 变成 /about
+        for link in all_urls:
+            # 取出链接的路径部分
             path = link.replace("https://sive.rs", "")
 
-            # 放行条件：路径长度大于1（排除首页），且绝不能是以黑名单里的词汇开头
+            # 放行条件：路径长度大于1，且不以黑名单里的任何词汇开头
             if len(path) > 1 and not any(path.startswith(b) for b in blacklist):
                 final_links.append(link)
 
-        return final_links
+        # 强行去重并返回
+        return list(set(final_links))
 
     except Exception as e:
-        st.error(f"🚨 抓取底层数据源失败: {e}")
+        st.error(f"🚨 Sitemap 抓取失败: {e}")
         return []
 
 
