@@ -1064,7 +1064,33 @@ if "text" in st.session_state and st.session_state["text"]:
         st.session_state["s4_initialized"] = True
 
     sentences = st.session_state["s4_sentences"]
+    # ==========================================
+    # 💡 新增：任意门（快速跳转器）
+    # ==========================================
+    # 生成下拉菜单的选项（截取前 40 个字符作为预览）
+    options = [f"第 {i+1} 句: {s[:40]}..." for i, s in enumerate(sentences)]
+
+    # 渲染下拉菜单，并将默认选中的值设为当前的进度
+    selected_option = st.selectbox(
+        "📍 快速跳转 / 恢复进度：",
+        options=options,
+        index=st.session_state["s4_current_index"],
+        help="如果页面刷新，可以从这里直接选回刚才练习的句子",
+    )
+
+    # 解析出用户选中的是第几个索引
+    selected_index = options.index(selected_option)
+
+    # 如果用户手动切换了下拉菜单，立刻更新底层系统状态并清空报错缓存
+    if selected_index != st.session_state["s4_current_index"]:
+        st.session_state["s4_current_index"] = selected_index
+        st.session_state["s4_retry_count"] = 0
+        st.session_state["s4_feedback"] = ""
+        st.rerun()  # 强制刷新页面应用新进度
+
+    # 重新获取可能已被修改的当前索引
     curr_idx = st.session_state["s4_current_index"]
+    # ==========================================
 
     # 2. 如果还没有通关全篇
     if curr_idx < len(sentences):
